@@ -1,0 +1,47 @@
+version: '3'
+
+vars:
+  BINARY_NAME: pxctl
+  BIN_DIR: ./bin
+  MAIN_PATH: ./cmd/pxctl
+
+tasks:
+  default:
+    desc: Build the application
+    cmds:
+      - task: build
+
+  build:
+    desc: Build the pxctl binary
+    cmds:
+      - mkdir -p {{.BIN_DIR}}
+      - go build -o {{.BIN_DIR}}/{{.BINARY_NAME}} {{.MAIN_PATH}}
+    sources:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+    generates:
+      - '{{.BIN_DIR}}/{{.BINARY_NAME}}'
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf {{.BIN_DIR}}
+
+  tidy:
+    desc: Tidy go modules
+    cmds:
+      - go mod tidy
+
+  run:
+    desc: Run the application
+    cmds:
+      - go run {{.MAIN_PATH}} {{.CLI_ARGS}}
+
+  install-deps:
+    desc: Install required dependencies
+    cmds:
+      - go get github.com/spf13/cobra@latest
+      - go get github.com/spf13/viper@latest
+      - go get github.com/google/uuid@latest
+      - go mod tidy
