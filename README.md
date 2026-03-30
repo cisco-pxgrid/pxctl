@@ -50,6 +50,49 @@ Example with verbose logging:
 ./bin/pxctl --verbose generate --connector SNOW_CMDB --count 10
 ```
 
+### List Connectors
+
+List the names of all pxGrid Direct connectors as a JSON array:
+
+```bash
+./bin/pxctl list-connectors \
+  --host <ISE_FQDN_OR_IP> \
+  --username <ISE_USERNAME> \
+  --password <ISE_PASSWORD>
+```
+
+#### Command Options
+
+- `-H, --host`: ISE FQDN or IP address (required, can use env: `PXCTL_ISE_HOST`)
+- `-u, --username`: ISE username (required, can use env: `PXCTL_ISE_USERNAME`)
+- `-p, --password`: ISE password (required, can use env: `PXCTL_ISE_PASSWORD`)
+
+#### Examples
+
+```bash
+# List all connectors
+./bin/pxctl list-connectors \
+  --host ise.example.com \
+  --username admin \
+  --password password123
+
+# Using environment variables
+export PXCTL_ISE_HOST=ise.example.com
+export PXCTL_ISE_USERNAME=admin
+export PXCTL_ISE_PASSWORD=password123
+
+./bin/pxctl list-connectors
+```
+
+Example output:
+```json
+[
+  "SNOW_CMDB",
+  "PUSH_CONNECTOR",
+  "MY_PULL_CONNECTOR"
+]
+```
+
 ### Generate Test Data
 
 Generate test data for a pxGrid Direct connector:
@@ -154,6 +197,58 @@ The verbose flag will output detailed information to stderr, such as:
 [2024-01-23 10:15:30.456] HTTP Response: 200 OK (took 329ms)
 [2024-01-23 10:15:30.457] Connector type: PUSH, enabled: true
 ...
+```
+
+### Dump Connector Configuration
+
+Retrieve and display the full configuration of a named connector:
+
+```bash
+./bin/pxctl dump-connector \
+  --host <ISE_FQDN_OR_IP> \
+  --username <ISE_USERNAME> \
+  --password <ISE_PASSWORD> \
+  --connector <CONNECTOR_NAME>
+```
+
+#### Command Options
+
+- `-H, --host`: ISE FQDN or IP address (required, can use env: `PXCTL_ISE_HOST`)
+- `-u, --username`: ISE username (required, can use env: `PXCTL_ISE_USERNAME`)
+- `-p, --password`: ISE password (required, can use env: `PXCTL_ISE_PASSWORD`)
+- `-c, --connector`: Name of the pxGrid Direct connector (required)
+- `--yaml`: Output in YAML format compatible with `create-push-connector` (default: JSON)
+
+#### Examples
+
+```bash
+# Dump a connector's configuration as JSON (default)
+./bin/pxctl dump-connector \
+  --host ise.example.com \
+  --username admin \
+  --password password123 \
+  --connector SNOW_CMDB
+
+# Dump as YAML (same format accepted by create-push-connector)
+./bin/pxctl dump-connector \
+  --host ise.example.com \
+  --username admin \
+  --password password123 \
+  --connector SNOW_CMDB \
+  --yaml
+
+# Using environment variables
+export PXCTL_ISE_HOST=ise.example.com
+export PXCTL_ISE_USERNAME=admin
+export PXCTL_ISE_PASSWORD=password123
+
+./bin/pxctl dump-connector --connector SNOW_CMDB
+
+# Save JSON output to a file
+./bin/pxctl dump-connector --connector SNOW_CMDB > connector-config.json
+
+# Save YAML output to a file (can be used with create-push-connector)
+./bin/pxctl dump-connector --connector SNOW_CMDB --yaml > connector.yaml
 ```
 
 ### Load Test Data
@@ -278,6 +373,124 @@ When verbose logging is enabled, you'll see detailed progress information includ
 [2024-01-23 10:20:16.291] HTTP Request: POST https://ise.example.com/api/v1/pxgrid-direct/push/PUSH_CONNECTOR/bulk
 [2024-01-23 10:20:16.512] HTTP Response: 200 OK (took 221ms)
 ...
+```
+
+### Create Push Connector
+
+Create a new pxGrid Direct push connector from a YAML configuration file:
+
+```bash
+./bin/pxctl create-push-connector \
+  --host <ISE_FQDN_OR_IP> \
+  --username <ISE_USERNAME> \
+  --password <ISE_PASSWORD> \
+  --config-file <YAML_FILE>
+```
+
+#### Command Options
+
+- `-H, --host`: ISE FQDN or IP address (required, can use env: `PXCTL_ISE_HOST`)
+- `-u, --username`: ISE username (required, can use env: `PXCTL_ISE_USERNAME`)
+- `-p, --password`: ISE password (required, can use env: `PXCTL_ISE_PASSWORD`)
+- `-f, --config-file`: Path to a YAML file defining the push connector configuration (required)
+
+#### How It Works
+
+1. Reads and parses the YAML configuration file
+2. Sets the connector type to `urlpusher` (push connector)
+3. Clears the `flexibleUrl` section (not used for push connectors)
+4. Submits the connector configuration to the ISE `/api/v1/pxgrid-direct/connector-config` API
+5. On failure, displays the URL and JSON payload used for debugging
+
+#### YAML Configuration
+
+The YAML file defines the push connector parameters. A sample file is provided at `examples/push-connector.yaml`.
+
+You can also export an existing connector's config in this format using `dump-connector --yaml`.
+
+Key fields in the YAML file:
+
+| Field | Description |
+|-------|-------------|
+| `connectorName` | Name for the new connector |
+| `description` | Description of the connector |
+| `enabled` | Whether the connector is enabled (true/false) |
+| `attributes` | Schema definition including correlation, unique, and version identifiers plus attribute mappings |
+| `skipCertificateValidations` | Skip TLS cert validation (true/false) |
+
+#### Examples
+
+```bash
+# Create a push connector from the sample YAML
+./bin/pxctl create-push-connector \
+  --host ise.example.com \
+  --username admin \
+  --password password123 \
+  --config-file examples/push-connector.yaml
+
+# Using environment variables
+export PXCTL_ISE_HOST=ise.example.com
+export PXCTL_ISE_USERNAME=admin
+export PXCTL_ISE_PASSWORD=password123
+
+./bin/pxctl create-push-connector \
+  --config-file examples/push-connector.yaml
+
+# Clone an existing connector: dump as YAML, then create
+./bin/pxctl dump-connector --connector EXISTING_CONNECTOR --yaml > new-connector.yaml
+# (edit new-connector.yaml to change connectorName, etc.)
+./bin/pxctl create-push-connector --config-file new-connector.yaml
+
+# With verbose logging
+./bin/pxctl --verbose create-push-connector \
+  --host ise.example.com \
+  --username admin \
+  --password password123 \
+  --config-file examples/push-connector.yaml
+```
+
+Expected output:
+```
+Reading connector configuration from 'examples/push-connector.yaml'...
+Creating push connector 'MY_PUSH_CONNECTOR' on ise.example.com...
+Successfully created push connector 'MY_PUSH_CONNECTOR'
+```
+
+### Delete Connector
+
+Delete a named pxGrid Direct push or pull connector:
+
+```bash
+./bin/pxctl delete-connector \
+  --host <ISE_FQDN_OR_IP> \
+  --username <ISE_USERNAME> \
+  --password <ISE_PASSWORD> \
+  --connector <CONNECTOR_NAME>
+```
+
+#### Command Options
+
+- `-H, --host`: ISE FQDN or IP address (required, can use env: `PXCTL_ISE_HOST`)
+- `-u, --username`: ISE username (required, can use env: `PXCTL_ISE_USERNAME`)
+- `-p, --password`: ISE password (required, can use env: `PXCTL_ISE_PASSWORD`)
+- `-c, --connector`: Name of the pxGrid Direct connector to delete (required)
+
+#### Examples
+
+```bash
+# Delete a connector
+./bin/pxctl delete-connector \
+  --host ise.example.com \
+  --username admin \
+  --password password123 \
+  --connector MY_PUSH_CONNECTOR
+
+# Using environment variables
+export PXCTL_ISE_HOST=ise.example.com
+export PXCTL_ISE_USERNAME=admin
+export PXCTL_ISE_PASSWORD=password123
+
+./bin/pxctl delete-connector --connector MY_PUSH_CONNECTOR
 ```
 
 ### Delete All Data
@@ -506,6 +719,7 @@ You can use a configuration file to store default values. By default, the tool l
 ├── bin/                    # Compiled binaries
 ├── cmd/
 │   └── pxctl/             # Main application entry point
+├── examples/              # Sample YAML config files for push connector creation
 ├── internal/
 │   ├── api/               # ISE API client
 │   ├── cmd/               # Cobra commands

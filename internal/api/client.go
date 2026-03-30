@@ -75,6 +75,61 @@ func NewClient(host, username, password string) *Client {
 	}
 }
 
+// GetAllConnectorNames retrieves names of all connectors
+func (c *Client) GetAllConnectorNames() ([]string, error) {
+	url := fmt.Sprintf("%s/api/v1/pxgrid-direct/connector-config", c.BaseURL)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.SetBasicAuth(c.Username, c.Password)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+
+	logger.HTTPRequest("GET", url)
+	startTime := time.Now()
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	duration := time.Since(startTime)
+	logger.HTTPResponse(resp.StatusCode, resp.Status, duration)
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Response []struct {
+			Connector struct {
+				ConnectorName string `json:"connectorName"`
+			} `json:"connector"`
+		} `json:"response"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	names := make([]string, 0, len(result.Response))
+	for _, item := range result.Response {
+		if item.Connector.ConnectorName != "" {
+			names = append(names, item.Connector.ConnectorName)
+		}
+	}
+
+	return names, nil
+}
+
 // GetConnectorConfig retrieves the connector configuration by name
 func (c *Client) GetConnectorConfig(connectorName string) (*ConnectorConfig, error) {
 	url := fmt.Sprintf("%s/api/v1/pxgrid-direct/connector-config/%s", c.BaseURL, connectorName)

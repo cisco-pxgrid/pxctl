@@ -1,6 +1,5 @@
 # SPECIFICATIONS
 
-
 ## Global Requirements & Information
 
 * Use Go 1.25 or greater
@@ -14,6 +13,49 @@
 * Support environment variables for all server, username and password parameters.
 * Provide a `--verbose` flag that logs to stderr detailed information about the progression of all commands. Include a summary of HTTP interactions, any backoff/retry, etc.
 
+## List Connectors
+
+* Command `list-connectors`
+* Take as input:
+  * Name of a connector
+  * ISE FQDN or IP address
+  * Username
+  * Password
+* List all connectors, output as a prettified JSON array of strings
+
+## Dump Connector Configuration
+
+* Command `dump-connector`
+* Take as input:
+  * Name of a connector
+  * ISE FQDN or IP address
+  * Username
+  * Password
+* Provide options to:
+  * Dump out the config as prettified JSON (default)
+  * Dump out config in same YAML format as accepted by `create-push-connector`
+
+## New Push Connector Creation
+
+* Command `create-push-connector`
+* Take as input:
+  * ISE FQDN or IP address
+  * Username
+  * Password
+  * A YAML file with the parameters to create a new pxGrid Direct **push connector**
+* Define a sample YAML file for creating a new pxGrid Direct push connector based on the OpenAPI schema in `pxgrid-direct.yaml`.
+* Implementatiopn notes:
+  * Flexible URL section MUST have no content
+
+## Delete Connector
+
+* Command `delete-connector`
+* Take as input:
+  * ISE FQDN or IP address
+  * Username
+  * Password
+  * Name of a push or pull connector
+* Delete the named connector
 
 ## Test Data Generation
 
@@ -32,7 +74,6 @@
   * Version identifier MUST be a UTC timestamp in a standard ISO format
   * All other fields MUST be populated with random ASCII strings of random lebgth between 8 and 64 characters in length
 
-
 ## Delete And Recreate A Named Connector
 
 * Create a command `recycle-connector`
@@ -45,8 +86,8 @@
 * Retrieve the named connector config, including credentials.
 * Extract the FULL object with JSON path `$.response.connector`.
 * If the `--copy` parameter IS provided, create a copy of the original named connector
-    * Ensure that any schedule parameters are updated to be at least 30 minutes in the future
-    * Use the connector config extracted above with the JSON payload setting extracted JSON object to the "connector" attribute in the POST
+  * Ensure that any schedule parameters are updated to be at least 30 minutes in the future
+  * Use the connector config extracted above with the JSON payload setting extracted JSON object to the "connector" attribute in the POST
 * If the `--copy` parameter IS NOT provided:
   * Attempt to delete the named connector
   * If deletion succeeds, fully recreate the connector
@@ -55,7 +96,6 @@
 * If connector creation fails with the error "API request failed with status 400: When a connector with huge number of endpoints is deleted using the Delete option, even though the connector is deleted from the GUI immediately, it might take few more seconds to delete all the endpoints associated with that connector. You will not be able to create a new connector with the same name before all the associated endpoints are deleted.", then retry the creation after 5 seconds, then 10 seconds, etc., until user hits CTRL+C.
 * As a final step, if it is a PULL connector, trigger a sync-now
 * If the creation of the new connector fails, display the URL POST'd to and JSON used in the POST in prettified format
-
 
 ## Load Data Via Push Connector
 
@@ -82,7 +122,6 @@
   * Ensure integrity of report display by flushing STDERR before displaying report.
   * Do not display report progressively, hold all reporting until either all work is completed or the user hits CTRL+C
 
-
 ## Load Data Using PUT Via Push Connector
 
 * Create a command `load-data-put`
@@ -105,14 +144,12 @@
 * Test data file will be a JSON document with the following contents:
   * Top-level array property
   * Array containing list of JSON objects to load into ISE using a PUT operation against `/api/v1/pxgrid-direct/push/{ConnectorName}/{uniqueId}`
-* 
 * Each JSON object in the array MUST be PUT against the URL `/api/v1/pxgrid-direct/push/{ConnectorName}/{uniqueId}`, where the `{uniqueId}` is extracted from the JSON object using the property name configured.
 * Honor error 429 and retry per backoff parameters
 * After run, report how long each batch of objects took to load
   * If application is terminated via SIGINT, report statistics so far.
   * Ensure integrity of report display by flushing STDERR before displaying report.
   * Do not display report progressively, hold all reporting until either all work is completed or the user hits CTRL+C
-
 
 ## Delete All Objects Held By A Named Push Connector
 
@@ -138,4 +175,3 @@
   * If application is terminated via SIGINT, report statistics so far.
   * Ensure integrity of report display by flushing STDERR before displaying report.
   * Do not display report progressively, hold all reporting until either all work is completed or the user hits CTRL+C
-

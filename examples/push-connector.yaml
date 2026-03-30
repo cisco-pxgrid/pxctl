@@ -1,0 +1,38 @@
+# Sample pxGrid Direct Push Connector Configuration
+#
+# This YAML file can be used with the create-push-connector command.
+# You can also generate this format from an existing connector using:
+#   pxctl dump-connector --connector <NAME> --yaml
+#
+# Fields like connectorType, flexibleUrl, url, groupArray, coaType, protocol,
+# fullsyncSchedule, deltasyncSchedule, and additionalProperties are set
+# automatically with proper defaults if not specified in this file.
+
+connectorName: MY_PUSH_CONNECTOR
+description: "Sample push connector"
+enabled: true
+skipCertificateValidations: false
+
+# Attributes define the schema for data pushed to ISE
+attributes:
+  correlationIdentifier: "mac_address"
+  uniqueIdentifier: "sys_id"
+  versionIdentifier: "sys_updated_on"
+  topLevelObject: "endpoint"
+  attributeMapping:
+    - jsonAttribute: "$.mac_address"
+      dictionaryAttribute: "mac_address"
+      includeInDictionary: true
+      coaSignificance: false
+    - jsonAttribute: "$.sys_id"
+      dictionaryAttribute: "sys_id"
+      includeInDictionary: true
+      coaSignificance: false
+    - jsonAttribute: "$.sys_updated_on"
+      dictionaryAttribute: "sys_updated_on"
+      includeInDictionary: true
+      coaSignificance: false
+    - jsonAttribute: "$.department"
+      dictionaryAttribute: "department"
+      includeInDictionary: true
+      coaSignificance: false
