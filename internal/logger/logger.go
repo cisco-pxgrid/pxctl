@@ -1,8 +1,10 @@
 package logger
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -40,6 +42,28 @@ func HTTPResponse(statusCode int, status string, duration time.Duration) {
 // Retry logs details about a retry attempt
 func Retry(reason string, backoffSeconds float64) {
 	Verbose("Retry: %s - backing off for %.3f seconds", reason, backoffSeconds)
+}
+
+// VerbosePrettyJSON logs a label followed by prettified JSON, with each line
+// individually timestamped. This keeps large payloads readable in log output.
+func VerbosePrettyJSON(label string, data []byte) {
+	if !verboseEnabled {
+		return
+	}
+	var pretty []byte
+	var buf interface{}
+	if err := json.Unmarshal(data, &buf); err == nil {
+		pretty, _ = json.MarshalIndent(buf, "  ", "  ")
+	}
+	if pretty == nil {
+		// Fallback: log raw if prettification fails
+		Verbose("%s: %s", label, string(data))
+		return
+	}
+	Verbose("%s:", label)
+	for _, line := range strings.Split(string(pretty), "\n") {
+		Verbose("  %s", line)
+	}
 }
 
 // Info logs an informational message (always shown)

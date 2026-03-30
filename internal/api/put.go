@@ -26,6 +26,7 @@ func (c *Client) PutData(connectorName string, uniqueID string, data map[string]
 	}
 
 	logger.Verbose("Prepared PUT request for object %s (%d bytes)", uniqueID, len(jsonData))
+	logger.VerbosePrettyJSON("Request body", jsonData)
 
 	// Retry loop for 429 errors
 	for {
@@ -39,6 +40,7 @@ func (c *Client) PutData(connectorName string, uniqueID string, data map[string]
 		req.Header.Set("Content-Type", "application/json")
 
 		logger.HTTPRequest("PUT", url)
+		logger.Verbose("Request headers: Content-Type=application/json, Accept=application/json")
 		startTime := time.Now()
 
 		resp, err := c.HTTPClient.Do(req)
@@ -54,6 +56,7 @@ func (c *Client) PutData(connectorName string, uniqueID string, data map[string]
 
 		duration := time.Since(startTime)
 		logger.HTTPResponse(resp.StatusCode, resp.Status, duration)
+		logger.VerbosePrettyJSON("Response body", body)
 
 		// Handle 429 rate limiting
 		if resp.StatusCode == http.StatusTooManyRequests {

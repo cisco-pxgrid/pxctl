@@ -423,7 +423,8 @@ func (c *Client) BulkPushDataWithRetry(connectorName string, data []map[string]i
 		return nil, fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
-	logger.Verbose("Prepared bulk push request with %d objects", len(data))
+	logger.Verbose("Prepared bulk push request with %d objects (%d bytes)", len(data), len(jsonData))
+	logger.VerbosePrettyJSON("Request body", jsonData)
 
 	// Retry loop for 429 errors
 	for {
@@ -437,6 +438,7 @@ func (c *Client) BulkPushDataWithRetry(connectorName string, data []map[string]i
 		req.Header.Set("Content-Type", "application/json")
 
 		logger.HTTPRequest("POST", url)
+		logger.Verbose("Request headers: Content-Type=application/json, Accept=application/json")
 		startTime := time.Now()
 
 		resp, err := c.HTTPClient.Do(req)
@@ -452,6 +454,7 @@ func (c *Client) BulkPushDataWithRetry(connectorName string, data []map[string]i
 
 		duration := time.Since(startTime)
 		logger.HTTPResponse(resp.StatusCode, resp.Status, duration)
+		logger.VerbosePrettyJSON("Response body", body)
 
 		// Handle 429 rate limiting
 		if resp.StatusCode == http.StatusTooManyRequests {

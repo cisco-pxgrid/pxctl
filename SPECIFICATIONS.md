@@ -121,6 +121,7 @@
   * If application is terminated via SIGINT, report statistics so far.
   * Ensure integrity of report display by flushing STDERR before displaying report.
   * Do not display report progressively, hold all reporting until either all work is completed or the user hits CTRL+C
+* In verbose logging mode please display full HTTP request being sent as well as response. For larger payloads ensure the text is split prettified across multiple log lines.
 
 ## Load Data Using PUT Via Push Connector
 
@@ -150,6 +151,7 @@
   * If application is terminated via SIGINT, report statistics so far.
   * Ensure integrity of report display by flushing STDERR before displaying report.
   * Do not display report progressively, hold all reporting until either all work is completed or the user hits CTRL+C
+* In verbose logging mode please display full HTTP request being sent as well as response.
 
 ## Delete All Objects Held By A Named Push Connector
 
