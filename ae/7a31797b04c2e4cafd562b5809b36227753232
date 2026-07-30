@@ -1,0 +1,95 @@
+internal/tui/tui.go
+  s_8df5c6f2fef7c2::t_2a7e9a62763817 56,58-59,80
+  s_8df5c6f2fef7c2::t_3353c7a57c12c6 17,72-75,106,140-142,186
+  s_8df5c6f2fef7c2::t_4305d8efa8ba06 118,121-122,147
+  s_8df5c6f2fef7c2::t_d0528ac032490a 14-16
+  s_8df5c6f2fef7c2::t_eed2a45329cc2f 42,134-136
+  s_8df5c6f2fef7c2::t_1b76b6840ec456 70-71,105,138-139,143,259-265
+  s_8df5c6f2fef7c2::t_bb20136782cab3 21-26,32-34,37-41,52,57,62-63,65,68-69,76-77,79,81-85,93,103-104,107-114,144-145,152-155,158,163,168,171,176-178,180-181,187-189,195,198,210
+  s_8df5c6f2fef7c2::t_75326b5bc5ebd8 202,226-258
+  s_8df5c6f2fef7c2::t_26d3ef5437968f 9
+  s_8df5c6f2fef7c2::t_12794401c18f09 1-8,10-13,18-20,27-31,35-36,43-51,53-55,60-61,64,66-67,78,86-92,94-102,115-117,119-120,123-133,137,146,148-151,156-157,159-162,164-167,169-170,172-175,179,182-185,190-194,196-197,199-201,203-209,211-225,266-287
+internal/cmd/utils_test.go
+  s_8df5c6f2fef7c2::t_01ed886ec7e5bc 12,15,21-28
+  s_8df5c6f2fef7c2::t_59723e50b50c1a 1-10,13,16-20,29-30
+  s_8df5c6f2fef7c2::t_6989cae16c3f4f 11
+  s_8df5c6f2fef7c2::t_16f44ca172187c 14
+internal/cmd/root.go
+  s_8df5c6f2fef7c2::t_e77eec2846b7de 21,23,26
+  s_8df5c6f2fef7c2::t_1213e1b0b8fe0a 4,22,24
+internal/logger/logger.go
+  s_8df5c6f2fef7c2::t_840ce920e9afd1 12,20-24,29-35,43
+  s_8df5c6f2fef7c2::t_f15a99821cba6c 13,25-28,63-65
+  s_8df5c6f2fef7c2::t_b6d84eb184f401 66-72
+internal/api/put.go
+  s_8df5c6f2fef7c2::t_4e81b2f106ff2f 37,70-71,75-77,79
+  s_8df5c6f2fef7c2::t_13f44c8781632c 21-25,69,72-74,78,80-81
+internal/cmd/utils.go
+  s_8df5c6f2fef7c2::t_44f169f468b3f6 3-4,6-7,22,40-47
+  s_8df5c6f2fef7c2::t_137a4cc96722db 5,48-64
+  s_8df5c6f2fef7c2::t_254fb2bd619fee 23,27,35
+  s_8df5c6f2fef7c2::t_01ed886ec7e5bc 24-26,28-34,36-39
+go.mod
+  s_8df5c6f2fef7c2::t_7dcadcf201e6d4 7-8
+  s_8df5c6f2fef7c2::t_9e99ac375600d9 15-20,24-30,32,39-40
+internal/cmd/delete-data.go
+  s_8df5c6f2fef7c2::t_1f664f399afb8c 248
+  s_8df5c6f2fef7c2::t_e8b09aedd97a09 244,266-272
+  s_8df5c6f2fef7c2::t_978366b0082787 24,44,220,243,245,247,249
+internal/cmd/jsonstream.go
+  s_8df5c6f2fef7c2::t_e749665c866630 1-150
+internal/cmd/load-data-put.go
+  s_8df5c6f2fef7c2::t_3fc1024dee5c25 193,197,220
+  s_8df5c6f2fef7c2::t_1f664f399afb8c 289-290
+  s_8df5c6f2fef7c2::t_adba1106eba017 332-333
+  s_8df5c6f2fef7c2::t_a91801ae6f87f8 164,292
+  s_8df5c6f2fef7c2::t_17460fc2959214 205,364,426
+  s_8df5c6f2fef7c2::t_09cb22528d8103 239-244,350
+  s_8df5c6f2fef7c2::t_c17b8ecf42816f 111-113,115,117,120-121,158,161,185,200-204,206,208-218,224-225
+  s_8df5c6f2fef7c2::t_8b36e8961b2743 288,322-331
+  s_8df5c6f2fef7c2::t_f2a999f5f14bef 163,371
+  s_8df5c6f2fef7c2::t_70d7396e0f0b5d 198-199,207,219,221-223,359-363,365-368,404
+  s_8df5c6f2fef7c2::t_6313ddd96b7727 14,29,53,159-160,162,165,268-270,306-308,312-314,369-370,372-374
+  s_8df5c6f2fef7c2::t_f7240d7fcde1e1 30,54,166-169,189-190,278-286,291,293-294,347-349
+internal/api/client.go
+  s_8df5c6f2fef7c2::t_4e81b2f106ff2f 366,397-398,402-404,406,452,485-486,490-492,494
+  s_8df5c6f2fef7c2::t_aefccca3055f0b 345-349,396,399-401,405,407-408,430-434,484,487-489,493,495-496
+README.md
+  s_8df5c6f2fef7c2::t_d2255e05c5fc41 48-49,281,341-347
+  s_8df5c6f2fef7c2::t_d2a6e1dcfcb085 279
+  s_8df5c6f2fef7c2::t_1e98da55c19c7f 348
+internal/cmd/load-data.go
+  s_8df5c6f2fef7c2::t_1f664f399afb8c 291
+  s_8df5c6f2fef7c2::t_fd4a9d58d8d0bc 100-101,103,105,108-109,115,126,138,141-142,148-153,156
+  s_8df5c6f2fef7c2::t_a91801ae6f87f8 159,293
+  s_8df5c6f2fef7c2::t_10ebece7e096e4 275,348
+  s_8df5c6f2fef7c2::t_c2d9e32c6b5987 197,255-264,280,287-290
+  s_8df5c6f2fef7c2::t_c8e6c8cf6c7a6b 13,50,154-155,157,160,166-168,170-173,274,276,298-300,306-308,321
+  s_8df5c6f2fef7c2::t_26d3ef5437968f 19-25,27
+  s_8df5c6f2fef7c2::t_7cd86fde820cc7 161-165,207-209,279,281-284,286,292,294-295
+  s_8df5c6f2fef7c2::t_e9083531101271 28,51
+  s_8df5c6f2fef7c2::t_eb25e4122a3a71 192-196,200,214-233,237-254,266,270
+  s_8df5c6f2fef7c2::t_ff0d88e361fefa 234-236
+  s_8df5c6f2fef7c2::t_4ba2d310c9920e 158,169
+  s_8df5c6f2fef7c2::t_dd716ebcfa3e0b 210
+internal/cmd/jsonstream_test.go
+  s_8df5c6f2fef7c2::t_9dbe271e545823 1-42
+go.sum
+  s_8df5c6f2fef7c2::t_bd5456dd291220 1-14,18-19,36-49,54-56,79-80,83-84,87-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "ae7a31797b04c2e4cafd562b5809b36227753232",
+  "prompts": {},
+  "sessions": {
+    "s_8df5c6f2fef7c2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fad4a-060b-74b2-af9f-b1f026ad6b15",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "Einar Nilsen-Nygaard <einarnn@gmail.com>"
+    }
+  }
+}
