@@ -10,19 +10,22 @@ import (
 
 	"github.com/einarnn/pxctl/internal/api"
 	"github.com/einarnn/pxctl/internal/logger"
+	"github.com/einarnn/pxctl/internal/tui"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var (
-	loadIseHost       string
-	loadIseUsername   string
-	loadIsePassword   string
-	loadConnectorName string
-	loadInputFile     string
-	loadBatchSize     int // 0 means no limit, only use 5MB constraint
-	loadBackoffTime   float64
+	loadIseHost            string
+	loadIseUsername        string
+	loadIsePassword        string
+	loadConnectorName      string
+	loadInputFile          string
+	loadBatchSize          int // 0 means no limit, only use 5MB constraint
+	loadBackoffTime        float64
 	loadEmptyCorrelationID bool // Deliberately empty the correlation ID to create bad requests
+	loadTUI                bool
+	load429Adaptive        bool
 )
 
 var loadDataCmd = &cobra.Command{
@@ -44,6 +47,8 @@ func init() {
 	loadDataCmd.Flags().IntVarP(&loadBatchSize, "batch-size", "b", 0, "Number of objects to submit per API call (optional, defaults to 5MB payload limit)")
 	loadDataCmd.Flags().Float64VarP(&loadBackoffTime, "backoff", "r", 0.5, "Seconds to wait on 429 rate limit (min: 0.001, max: 120)")
 	loadDataCmd.Flags().BoolVar(&loadEmptyCorrelationID, "empty-correlation-id", false, "Deliberately empty the correlation ID field to create bad requests (for testing)")
+	loadDataCmd.Flags().BoolVar(&loadTUI, "tui", false, "Show an interactive progress UI (mutually exclusive with --verbose)")
+	loadDataCmd.Flags().BoolVar(&load429Adaptive, "429-adaptive", false, "Adapt the 429 retry timer to observed batch duration")
 
 	// Bind environment variables
 	viper.BindEnv("ise.host", "PXCTL_ISE_HOST")
@@ -92,47 +97,22 @@ func runLoadData(cmd *cobra.Command, args []string) error {
 	}
 
 	// Read input file
-	fmt.Printf("Reading test data from %s...\n", loadInputFile)
-	logger.Verbose("Reading input file: %s", loadInputFile)
-	fileData, err := os.ReadFile(loadInputFile)
+	fmt.Printf("Scanning test data from %s...\n", loadInputFile)
+	objectCount, err := countJSONObjects(loadInputFile)
 	if err != nil {
-		return fmt.Errorf("failed to read input file: %w", err)
+		return fmt.Errorf("failed to scan JSON input file: %w", err)
 	}
-	logger.Verbose("Read %d bytes from input file", len(fileData))
-
-	// Parse JSON data
-	logger.Verbose("Parsing JSON data")
-	var inputData map[string]interface{}
-	if err := json.Unmarshal(fileData, &inputData); err != nil {
-		return fmt.Errorf("failed to parse JSON input file: %w", err)
-	}
-
-	// Extract the data array from the top-level object
-	logger.Verbose("Extracting data array from JSON")
-	var dataArray []map[string]interface{}
-	for _, value := range inputData {
-		if arr, ok := value.([]interface{}); ok {
-			// Convert []interface{} to []map[string]interface{}
-			for _, item := range arr {
-				if obj, ok := item.(map[string]interface{}); ok {
-					dataArray = append(dataArray, obj)
-				}
-			}
-			break
-		}
-	}
-
-	if len(dataArray) == 0 {
+	if objectCount == 0 {
 		return fmt.Errorf("no data found in input file")
 	}
-
-	fmt.Printf("Found %d objects to load\n", len(dataArray))
-	logger.Verbose("Extracted %d data objects from input file", len(dataArray))
+	fmt.Printf("Found %d objects to load\n", objectCount)
+	logger.Verbose("Pre-scanned %d data objects from input file", objectCount)
 
 	// Create API client
 	logger.Verbose("Creating ISE API client for host: %s", host)
 	client := api.NewClient(host, username, password)
 
+	correlationIDField := ""
 	// If --empty-correlation-id flag is set, retrieve connector config and empty the correlation ID field
 	if loadEmptyCorrelationID {
 		fmt.Printf("Retrieving connector configuration to identify correlation ID field...\n")
@@ -143,7 +123,7 @@ func runLoadData(cmd *cobra.Command, args []string) error {
 		}
 
 		// Extract correlation identifier from connector config
-		correlationIDField := connectorConfig.Response.Connector.Attributes.CorrelationIdentifier
+		correlationIDField = connectorConfig.Response.Connector.Attributes.CorrelationIdentifier
 
 		// Remove the $. prefix if present
 		if len(correlationIDField) > 2 && correlationIDField[:2] == "$." {
@@ -155,69 +135,42 @@ func runLoadData(cmd *cobra.Command, args []string) error {
 		}
 
 		fmt.Printf("Emptying correlation ID field '%s' in all objects to create bad requests...\n", correlationIDField)
-		logger.Verbose("Emptying correlation ID field '%s' in %d objects", correlationIDField, len(dataArray))
-
-		// Empty the correlation ID field in all objects
-		modifiedCount := 0
-		for _, obj := range dataArray {
-			if _, exists := obj[correlationIDField]; exists {
-				obj[correlationIDField] = ""
-				modifiedCount++
-			}
-		}
-
-		logger.Verbose("Modified %d objects by emptying correlation ID field", modifiedCount)
-		fmt.Printf("Modified %d objects by emptying correlation ID field '%s'\n", modifiedCount, correlationIDField)
+		logger.Verbose("Will empty correlation ID field '%s' while streaming objects", correlationIDField)
 	}
 
-	// Process data in batches with 5MB size limit
+	// Process data in batches with 5MB size limit. The second pass streams one
+	// object at a time and never retains the complete input document.
 	const maxBatchSizeBytes = 5 * 1024 * 1024 // 5MB
-	var batches [][]map[string]interface{}
-	var currentBatch []map[string]interface{}
-	var currentBatchSize int
-
-	for _, obj := range dataArray {
-		objJSON, err := json.Marshal(obj)
-		if err != nil {
-			return fmt.Errorf("failed to marshal object: %w", err)
-		}
-		objSize := len(objJSON)
-
-		// Check if we need to start a new batch
-		shouldStartNewBatch := false
-
-		// Always check 5MB limit
-		if currentBatchSize+objSize > maxBatchSizeBytes && len(currentBatch) > 0 {
-			shouldStartNewBatch = true
-		}
-
-		// If batch size is specified (> 0), also check object count limit
-		if loadBatchSize > 0 && len(currentBatch) >= loadBatchSize {
-			shouldStartNewBatch = true
-		}
-
-		if shouldStartNewBatch {
-			batches = append(batches, currentBatch)
-			currentBatch = []map[string]interface{}{}
-			currentBatchSize = 0
-		}
-
-		currentBatch = append(currentBatch, obj)
-		currentBatchSize += objSize
-	}
-
-	// Add the last batch if it has any objects
-	if len(currentBatch) > 0 {
-		batches = append(batches, currentBatch)
-	}
-
-	totalBatches := len(batches)
-
 	batchConstraint := "5MB limit"
 	if loadBatchSize > 0 {
 		batchConstraint = fmt.Sprintf("max %d objects or 5MB per batch", loadBatchSize)
 	}
-	logger.Verbose("Processing %d objects in %d batches (%s)", len(dataArray), totalBatches, batchConstraint)
+	logger.Verbose("Processing %d objects in streamed batches (%s)", objectCount, batchConstraint)
+	stream, err := newJSONObjectStream(loadInputFile)
+	if err != nil {
+		return fmt.Errorf("failed to open JSON input stream: %w", err)
+	}
+	defer stream.Close()
+	var ui *tui.Reporter
+	if loadTUI {
+		ui = tui.Start(objectCount)
+		logger.SetEventSink(ui.Log)
+		logger.SetRetrySink(func(seconds float64) { ui.SetRetryTimer(time.Duration(seconds * float64(time.Second))) })
+		ui.SetMainRetryTimer(time.Duration(loadBackoffTime * float64(time.Second)))
+	}
+	var uiInterrupt <-chan struct{}
+	if ui != nil {
+		uiInterrupt = ui.Interrupt()
+	}
+	adaptiveBackoff := loadBackoffTime
+	stopUI := func() {
+		if ui != nil {
+			logger.SetEventSink(nil)
+			logger.SetRetrySink(nil)
+			ui.Close()
+			ui = nil
+		}
+	}
 
 	// Set up signal handling for SIGINT
 	sigChan := make(chan os.Signal, 1)
@@ -236,37 +189,123 @@ func runLoadData(cmd *cobra.Command, args []string) error {
 
 	var results []batchResult
 	interrupted := false
+	var streamErr error
+	var pending map[string]interface{}
+	pendingSize := 0
+	hasPending := false
+	batchIndex := 0
+	var pacingDuration time.Duration
 
 	// Process batches
-	for batchIndex, batch := range batches {
+	for {
 		// Check for interrupt signal
 		select {
 		case <-sigChan:
 			interrupted = true
 			logger.Verbose("Received SIGINT - stopping after current batch")
 			goto printResults
+		case <-uiInterrupt:
+			interrupted = true
+			logger.Verbose("Received CTRL-C - stopping after current batch")
+			goto printResults
 		default:
 		}
 
+		batch := make([]map[string]interface{}, 0)
+		batchSizeBytes := 0
+		for {
+			var obj map[string]interface{}
+			var objSize int
+			if hasPending {
+				obj, objSize, hasPending = pending, pendingSize, false
+			} else {
+				var done bool
+				obj, done, streamErr = stream.Next()
+				if streamErr != nil {
+					if ui != nil {
+						ui.Failure(fmt.Sprintf("Input stream failed: %v", streamErr))
+					}
+					goto printResults
+				}
+				if done {
+					break
+				}
+				if correlationIDField != "" {
+					if _, exists := obj[correlationIDField]; exists {
+						obj[correlationIDField] = ""
+					}
+				}
+				encoded, err := json.Marshal(obj)
+				if err != nil {
+					streamErr = fmt.Errorf("failed to marshal object: %w", err)
+					goto printResults
+				}
+				objSize = len(encoded)
+			}
+			if len(batch) > 0 && (batchSizeBytes+objSize > maxBatchSizeBytes || (loadBatchSize > 0 && len(batch) >= loadBatchSize)) {
+				pending, pendingSize, hasPending = obj, objSize, true
+				break
+			}
+			batch = append(batch, obj)
+			batchSizeBytes += objSize
+		}
+		if len(batch) == 0 {
+			break
+		}
+		if pacingDuration > 0 {
+			if ui != nil {
+				ui.Log(fmt.Sprintf("Pacing next batch for %v", pacingDuration.Round(time.Millisecond)))
+			}
+			if !waitForPacing(pacingDuration, sigChan, uiInterrupt) {
+				interrupted = true
+				goto printResults
+			}
+			pacingDuration = 0
+		}
 		batchNum := batchIndex + 1
+		batchIndex++
 
 		// Calculate batch size in bytes
 		batchJSON, _ := json.Marshal(batch)
-		batchSizeBytes := len(batchJSON)
+		batchSizeBytes = len(batchJSON)
 		batchSizeStr := formatBytes(batchSizeBytes)
 
 		logger.Verbose("Batch %d: submitting %d objects (%s)", batchNum, len(batch), batchSizeStr)
+		if ui != nil {
+			ui.Log(fmt.Sprintf("Submitting batch %d (%d records)", batchNum, len(batch)))
+		}
 
 		batchStart := time.Now()
-		response, err := client.BulkPushDataWithRetry(loadConnectorName, batch, loadBackoffTime)
+		had429 := false
+		requestMainDuration := time.Duration(adaptiveBackoff * float64(time.Second))
+		if ui != nil {
+			ui.SetRetryTimer(time.Duration(adaptiveBackoff * float64(time.Second)))
+		}
+		response, err := client.BulkPushDataWithRetryAdaptive(loadConnectorName, batch, adaptiveBackoff, load429Adaptive, func() { had429 = true })
 		batchDuration := time.Since(batchStart)
+		if load429Adaptive {
+			pacingDuration = requestMainDuration - batchDuration
+			if pacingDuration < 0 {
+				pacingDuration = 0
+			}
+			adaptiveBackoff = adaptiveRetryDelay(adaptiveBackoff, batchDuration, !had429)
+			if ui != nil {
+				ui.SetMainRetryTimer(time.Duration(adaptiveBackoff * float64(time.Second)))
+			}
+		}
 
 		if err != nil {
+			if ui != nil {
+				ui.Failure(fmt.Sprintf("Batch %d failed: %v", batchNum, err))
+			}
 			// Print results accumulated so far before returning error
 			goto printResults
 		}
 
 		logger.Verbose("Batch %d completed successfully: %s (took %v)", batchNum, response.Status, batchDuration)
+		if ui != nil {
+			ui.Success(len(batch), fmt.Sprintf("Batch %d succeeded (%s, %v)", batchNum, response.Status, batchDuration.Round(time.Millisecond)))
+		}
 
 		results = append(results, batchResult{
 			batchNum:     batchNum,
@@ -279,6 +318,7 @@ func runLoadData(cmd *cobra.Command, args []string) error {
 	}
 
 printResults:
+	stopUI()
 	// Flush stderr before printing results to stdout
 	os.Stderr.Sync()
 
@@ -305,5 +345,5 @@ printResults:
 		fmt.Printf("\nSuccessfully loaded %d objects to connector '%s'\n", successCount, loadConnectorName)
 		logger.Verbose("Load operation completed: %d objects successfully loaded", successCount)
 	}
-	return nil
+	return streamErr
 }

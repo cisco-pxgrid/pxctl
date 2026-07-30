@@ -21,6 +21,7 @@ var (
 	deleteConnectorName string
 	deleteBatchSize     int // 0 means no limit, only use 5MB constraint
 	deleteBackoffTime   float64
+	delete429Adaptive   bool
 )
 
 var deleteDataCmd = &cobra.Command{
@@ -40,6 +41,7 @@ func init() {
 	deleteDataCmd.Flags().StringVarP(&deleteConnectorName, "connector", "c", "", "pxGrid Direct push connector name (required)")
 	deleteDataCmd.Flags().IntVarP(&deleteBatchSize, "batch-size", "b", 0, "Number of objects to delete per API call (optional, defaults to 5MB payload limit)")
 	deleteDataCmd.Flags().Float64VarP(&deleteBackoffTime, "backoff", "r", 0.5, "Seconds to wait on 429 rate limit (min: 0.001, max: 120)")
+	deleteDataCmd.Flags().BoolVar(&delete429Adaptive, "429-adaptive", false, "Adapt the 429 retry timer to observed batch duration")
 
 	// Bind environment variables
 	viper.BindEnv("ise.host", "PXCTL_ISE_HOST")
@@ -215,6 +217,7 @@ func runDeleteData(cmd *cobra.Command, args []string) error {
 
 	var results []batchResult
 	interrupted := false
+	adaptiveBackoff := deleteBackoffTime
 
 	// Process batches
 	for batchIndex, batch := range batches {
@@ -237,8 +240,13 @@ func runDeleteData(cmd *cobra.Command, args []string) error {
 		logger.Verbose("Batch %d: deleting %d objects (%s)", batchNum, len(batch), batchSizeStr)
 
 		batchStart := time.Now()
-		response, err := client.BulkDeleteData(deleteConnectorName, batch, deleteBackoffTime)
+		had429 := false
+		requestMainDuration := time.Duration(adaptiveBackoff * float64(time.Second))
+		response, err := client.BulkDeleteDataAdaptive(deleteConnectorName, batch, adaptiveBackoff, delete429Adaptive, func() { had429 = true })
 		batchDuration := time.Since(batchStart)
+		if delete429Adaptive {
+			adaptiveBackoff = adaptiveRetryDelay(adaptiveBackoff, batchDuration, !had429)
+		}
 
 		if err != nil {
 			// Print results accumulated so far before returning error
@@ -255,6 +263,13 @@ func runDeleteData(cmd *cobra.Command, args []string) error {
 			status:       response.Status,
 			successCount: len(batch),
 		})
+		if delete429Adaptive && batchIndex < len(batches)-1 {
+			pacingDuration := requestMainDuration - batchDuration
+			if pacingDuration > 0 && !waitForPacing(pacingDuration, sigChan, nil) {
+				interrupted = true
+				goto printResults
+			}
+		}
 	}
 
 printResults:

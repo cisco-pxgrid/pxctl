@@ -45,6 +45,8 @@ All commands support the following global options:
   - Data processing steps
   - File operations
 
+`load-data` and `load-data-put` also support `--tui`, which opens an interactive terminal UI with a framed scrolling operation log and live record status. The UI shows inserted records, records remaining, current throughput, and an estimated finish time. Use `j`/`k`, arrow keys, Page Up/Page Down, Home, and End to scroll. `--tui` and `--verbose` are mutually exclusive.
+
 Example with verbose logging:
 ```bash
 ./bin/pxctl --verbose generate --connector SNOW_CMDB --count 10
@@ -274,7 +276,9 @@ Load previously generated test data into ISE via a pxGrid Direct push connector:
 - `-i, --input`: Input JSON file containing test data (required)
 - `-b, --batch-size`: Number of objects to submit per API call (default: 100)
 - `-r, --backoff`: Seconds to wait on 429 rate limit (default: 0.5, min: 0.001, max: 120)
+- `--429-adaptive`: Use congestion feedback to find the smallest stable interval. Clean periods reduce the main interval by 2%, a 429 increases it by 25%, and it never drops below the actual request duration. The first 429 retry uses the main baseline; subsequent 429 retries use 25% of it.
 - `--empty-correlation-id`: Deliberately empty the correlation ID field to create bad requests (for testing)
+- `--tui`: Show the interactive progress UI instead of verbose logging
 
 #### How It Works
 
@@ -333,6 +337,14 @@ export PXCTL_ISE_PASSWORD=password123
   --connector PUSH_CONNECTOR \
   --input testdata.json \
   --batch-size 50
+
+# With the interactive progress UI (do not combine with --verbose)
+./bin/pxctl load-data --tui \
+  --host ise.example.com \
+  --username admin \
+  --password password123 \
+  --connector PUSH_CONNECTOR \
+  --input testdata.json
 
 # Testing error handling by deliberately emptying the correlation ID
 ./bin/pxctl load-data \

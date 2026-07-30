@@ -18,6 +18,11 @@ type PutDataResponse struct {
 
 // PutData submits a single object to the PUT API endpoint with retry logic for 429 rate limiting
 func (c *Client) PutData(connectorName string, uniqueID string, data map[string]interface{}, backoffSeconds float64) (*PutDataResponse, error) {
+	return c.PutDataAdaptive(connectorName, uniqueID, data, backoffSeconds, false, nil)
+}
+
+// PutDataAdaptive is PutData with adaptive 429 backoff support.
+func (c *Client) PutDataAdaptive(connectorName string, uniqueID string, data map[string]interface{}, backoffSeconds float64, adaptive bool, on429 func()) (*PutDataResponse, error) {
 	url := fmt.Sprintf("%s/api/v1/pxgrid-direct/push/%s/%s", c.BaseURL, connectorName, uniqueID)
 
 	jsonData, err := json.Marshal(data)
@@ -29,6 +34,7 @@ func (c *Client) PutData(connectorName string, uniqueID string, data map[string]
 	logger.VerbosePrettyJSON("Request body", jsonData)
 
 	// Retry loop for 429 errors
+	first429 := true
 	for {
 		req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonData))
 		if err != nil {
@@ -60,8 +66,19 @@ func (c *Client) PutData(connectorName string, uniqueID string, data map[string]
 
 		// Handle 429 rate limiting
 		if resp.StatusCode == http.StatusTooManyRequests {
-			logger.Retry("received 429 Too Many Requests", backoffSeconds)
-			backoffDuration := time.Duration(backoffSeconds * float64(time.Second))
+			retrySeconds := backoffSeconds
+			if adaptive && !first429 {
+				retrySeconds *= 0.25
+				if retrySeconds < 0.001 {
+					retrySeconds = 0.001
+				}
+			}
+			if adaptive && on429 != nil {
+				on429()
+			}
+			first429 = false
+			logger.Retry("received 429 Too Many Requests", retrySeconds)
+			backoffDuration := time.Duration(retrySeconds * float64(time.Second))
 			time.Sleep(backoffDuration)
 			continue // Retry the request
 		}

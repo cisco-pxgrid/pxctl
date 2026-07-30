@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/einarnn/pxctl/internal/logger"
@@ -17,8 +18,12 @@ var (
 		Long: `pxctl is a CLI tool for generating and loading test data for Cisco ISE pxGrid Direct connectors.
 It connects to ISE, retrieves connector configurations, generates sample data according to
 the connector's schema, and can load that data into ISE via push connectors.`,
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if verbose && cmd.Flags().Lookup("tui") != nil && cmd.Flags().Lookup("tui").Changed {
+				return fmt.Errorf("--tui and --verbose are mutually exclusive")
+			}
 			logger.SetVerbose(verbose)
+			return nil
 		},
 	}
 )

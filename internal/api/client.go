@@ -342,6 +342,11 @@ func (c *Client) GetAllPushConnectorObjects(connectorName string) ([]map[string]
 
 // BulkDeleteData submits delete operations to the bulk push API endpoint with retry logic for 429 rate limiting
 func (c *Client) BulkDeleteData(connectorName string, data []map[string]interface{}, backoffSeconds float64) (*BulkPushResponse, error) {
+	return c.BulkDeleteDataAdaptive(connectorName, data, backoffSeconds, false, nil)
+}
+
+// BulkDeleteDataAdaptive is BulkDeleteData with adaptive 429 backoff support.
+func (c *Client) BulkDeleteDataAdaptive(connectorName string, data []map[string]interface{}, backoffSeconds float64, adaptive bool, on429 func()) (*BulkPushResponse, error) {
 	url := fmt.Sprintf("%s/api/v1/pxgrid-direct/push/%s/bulk", c.BaseURL, connectorName)
 
 	// Create request body
@@ -358,6 +363,7 @@ func (c *Client) BulkDeleteData(connectorName string, data []map[string]interfac
 	logger.Verbose("Prepared bulk delete request with %d objects (%d bytes)", len(data), len(jsonData))
 
 	// Retry loop for 429 errors
+	first429 := true
 	for {
 		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 		if err != nil {
@@ -387,8 +393,19 @@ func (c *Client) BulkDeleteData(connectorName string, data []map[string]interfac
 
 		// Handle 429 rate limiting
 		if resp.StatusCode == http.StatusTooManyRequests {
-			logger.Retry("received 429 Too Many Requests", backoffSeconds)
-			backoffDuration := time.Duration(backoffSeconds * float64(time.Second))
+			retrySeconds := backoffSeconds
+			if adaptive && !first429 {
+				retrySeconds *= 0.25
+				if retrySeconds < 0.001 {
+					retrySeconds = 0.001
+				}
+			}
+			if adaptive && on429 != nil {
+				on429()
+			}
+			first429 = false
+			logger.Retry("received 429 Too Many Requests", retrySeconds)
+			backoffDuration := time.Duration(retrySeconds * float64(time.Second))
 			time.Sleep(backoffDuration)
 			continue // Retry the request
 		}
@@ -410,6 +427,11 @@ func (c *Client) BulkDeleteData(connectorName string, data []map[string]interfac
 
 // BulkPushDataWithRetry submits data to the bulk push API endpoint with retry logic for 429 rate limiting
 func (c *Client) BulkPushDataWithRetry(connectorName string, data []map[string]interface{}, backoffSeconds float64) (*BulkPushResponse, error) {
+	return c.BulkPushDataWithRetryAdaptive(connectorName, data, backoffSeconds, false, nil)
+}
+
+// BulkPushDataWithRetryAdaptive is BulkPushDataWithRetry with adaptive 429 backoff support.
+func (c *Client) BulkPushDataWithRetryAdaptive(connectorName string, data []map[string]interface{}, backoffSeconds float64, adaptive bool, on429 func()) (*BulkPushResponse, error) {
 	url := fmt.Sprintf("%s/api/v1/pxgrid-direct/push/%s/bulk", c.BaseURL, connectorName)
 
 	// Create request body
@@ -427,6 +449,7 @@ func (c *Client) BulkPushDataWithRetry(connectorName string, data []map[string]i
 	logger.VerbosePrettyJSON("Request body", jsonData)
 
 	// Retry loop for 429 errors
+	first429 := true
 	for {
 		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 		if err != nil {
@@ -458,8 +481,19 @@ func (c *Client) BulkPushDataWithRetry(connectorName string, data []map[string]i
 
 		// Handle 429 rate limiting
 		if resp.StatusCode == http.StatusTooManyRequests {
-			logger.Retry("received 429 Too Many Requests", backoffSeconds)
-			backoffDuration := time.Duration(backoffSeconds * float64(time.Second))
+			retrySeconds := backoffSeconds
+			if adaptive && !first429 {
+				retrySeconds *= 0.25
+				if retrySeconds < 0.001 {
+					retrySeconds = 0.001
+				}
+			}
+			if adaptive && on429 != nil {
+				on429()
+			}
+			first429 = false
+			logger.Retry("received 429 Too Many Requests", retrySeconds)
+			backoffDuration := time.Duration(retrySeconds * float64(time.Second))
 			time.Sleep(backoffDuration)
 			continue // Retry the request
 		}

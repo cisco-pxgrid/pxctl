@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/einarnn/pxctl/internal/api"
 	"github.com/einarnn/pxctl/internal/logger"
+	"github.com/einarnn/pxctl/internal/tui"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -26,6 +26,8 @@ var (
 	loadPutConcurrency   int
 	loadPutDelay         float64
 	loadPutBackoffTime   float64
+	loadPutTUI           bool
+	loadPut429Adaptive   bool
 )
 
 var loadDataPutCmd = &cobra.Command{
@@ -48,6 +50,8 @@ func init() {
 	loadDataPutCmd.Flags().IntVarP(&loadPutConcurrency, "concurrency", "n", 10, "Number of concurrent PUT requests (default: 10)")
 	loadDataPutCmd.Flags().Float64VarP(&loadPutDelay, "delay", "d", 0.0, "Inter-object delay in seconds (min: 0.0, max: 5.0)")
 	loadDataPutCmd.Flags().Float64VarP(&loadPutBackoffTime, "backoff", "r", 0.5, "Seconds to wait on 429 rate limit (min: 0.001, max: 120)")
+	loadDataPutCmd.Flags().BoolVar(&loadPutTUI, "tui", false, "Show an interactive progress UI (mutually exclusive with --verbose)")
+	loadDataPutCmd.Flags().BoolVar(&loadPut429Adaptive, "429-adaptive", false, "Adapt the 429 retry timer to observed request duration")
 
 	// Bind environment variables
 	viper.BindEnv("ise.host", "PXCTL_ISE_HOST")
@@ -104,43 +108,17 @@ func runLoadDataPut(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("concurrency must be at least 1, got %d", loadPutConcurrency)
 	}
 
-	// Read input file
-	fmt.Printf("Reading test data from %s...\n", loadPutInputFile)
-	logger.Verbose("Reading input file: %s", loadPutInputFile)
-	fileData, err := os.ReadFile(loadPutInputFile)
+	// Pre-scan the array to get the total without loading the file into memory.
+	fmt.Printf("Scanning test data from %s...\n", loadPutInputFile)
+	objectCount, err := countJSONObjects(loadPutInputFile)
 	if err != nil {
-		return fmt.Errorf("failed to read input file: %w", err)
+		return fmt.Errorf("failed to scan JSON input file: %w", err)
 	}
-	logger.Verbose("Read %d bytes from input file", len(fileData))
-
-	// Parse JSON data
-	logger.Verbose("Parsing JSON data")
-	var inputData map[string]interface{}
-	if err := json.Unmarshal(fileData, &inputData); err != nil {
-		return fmt.Errorf("failed to parse JSON input file: %w", err)
-	}
-
-	// Extract the data array from the top-level object
-	logger.Verbose("Extracting data array from JSON")
-	var dataArray []map[string]interface{}
-	for _, value := range inputData {
-		if arr, ok := value.([]interface{}); ok {
-			// Convert []interface{} to []map[string]interface{}
-			for _, item := range arr {
-				if obj, ok := item.(map[string]interface{}); ok {
-					dataArray = append(dataArray, obj)
-				}
-			}
-			break
-		}
-	}
-
-	if len(dataArray) == 0 {
+	if objectCount == 0 {
 		return fmt.Errorf("no data found in input file")
 	}
-
-	fmt.Printf("Found %d objects to load\n", len(dataArray))
-	logger.Verbose("Extracted %d data objects from input file", len(dataArray))
+	fmt.Printf("Found %d objects to load\n", objectCount)
+	logger.Verbose("Pre-scanned %d data objects from input file", objectCount)
 
 	// Create API client
 	logger.Verbose("Creating ISE API client for host: %s", host)
@@ -177,7 +155,18 @@ func runLoadDataPut(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Auto-discovered unique identifier field: %s\n", uniqueIDField)
 	}
 
-	logger.Verbose("Processing %d objects with concurrency factor of %d", len(dataArray), loadPutConcurrency)
+	logger.Verbose("Processing %d objects with concurrency factor of %d", objectCount, loadPutConcurrency)
+	var ui *tui.Reporter
+	if loadPutTUI {
+		ui = tui.Start(objectCount)
+		logger.SetEventSink(ui.Log)
+		logger.SetRetrySink(func(seconds float64) { ui.SetRetryTimer(time.Duration(seconds * float64(time.Second))) })
+		ui.SetMainRetryTimer(time.Duration(loadPutBackoffTime * float64(time.Second)))
+	}
+	var uiInterrupt <-chan struct{}
+	if ui != nil {
+		uiInterrupt = ui.Interrupt()
+	}
 
 	// Set up signal handling for SIGINT
 	sigChan := make(chan os.Signal, 1)
@@ -193,25 +182,47 @@ func runLoadDataPut(cmd *cobra.Command, args []string) error {
 		err       error
 	}
 
-	results := make([]putResult, 0, len(dataArray))
+	results := make([]putResult, 0, objectCount)
 	var resultsMutex sync.Mutex
 	var interrupted atomic.Bool
 	var processedCount atomic.Int64
+	var adaptiveBackoff atomic.Int64
+	adaptiveBackoff.Store(int64(loadPutBackoffTime * float64(time.Second)))
 
 	// Create work channel
-	workChan := make(chan struct {
+	type workItem struct {
 		index int
 		obj   map[string]interface{}
-	}, len(dataArray))
-
-	// Fill work channel
-	for i, obj := range dataArray {
-		workChan <- struct {
-			index int
-			obj   map[string]interface{}
-		}{i, obj}
 	}
-	close(workChan)
+	workChan := make(chan workItem, loadPutConcurrency)
+	stopStream := make(chan struct{})
+	producerDone := make(chan struct{})
+	stream, err := newJSONObjectStream(loadPutInputFile)
+	if err != nil {
+		return fmt.Errorf("failed to open JSON input stream: %w", err)
+	}
+	streamErr := make(chan error, 1)
+	var streamFailure error
+	go func() {
+		defer close(producerDone)
+		defer stream.Close()
+		defer close(workChan)
+		for index := 0; ; index++ {
+			obj, done, err := stream.Next()
+			if err != nil {
+				streamErr <- err
+				return
+			}
+			if done {
+				return
+			}
+			select {
+			case workChan <- workItem{index: index, obj: obj}:
+			case <-stopStream:
+				return
+			}
+		}
+	}()
 
 	// Start worker goroutines
 	var wg sync.WaitGroup
@@ -224,6 +235,12 @@ func runLoadDataPut(cmd *cobra.Command, args []string) error {
 				// Check for interrupt
 				if interrupted.Load() {
 					return
+				}
+				select {
+				case <-uiInterrupt:
+					interrupted.Store(true)
+					return
+				default:
 				}
 
 				objNum := work.index + 1
@@ -248,6 +265,9 @@ func runLoadDataPut(cmd *cobra.Command, args []string) error {
 						err:       fmt.Errorf("missing unique identifier field: %s", uniqueIDField),
 					})
 					resultsMutex.Unlock()
+					if ui != nil {
+						ui.Failure(fmt.Sprintf("Object %d skipped: missing unique identifier field %q", objNum, uniqueIDField))
+					}
 					processedCount.Add(1)
 					continue
 				}
@@ -255,8 +275,23 @@ func runLoadDataPut(cmd *cobra.Command, args []string) error {
 				logger.Verbose("Worker %d: submitting object %d (ID: %s)", workerID, objNum, uniqueID)
 
 				startTime := time.Now()
-				response, err := client.PutData(loadPutConnectorName, uniqueID, obj, loadPutBackoffTime)
+				backoff := loadPutBackoffTime
+				if loadPut429Adaptive {
+					backoff = float64(adaptiveBackoff.Load()) / float64(time.Second)
+				}
+				had429 := false
+				if ui != nil {
+					ui.SetRetryTimer(time.Duration(backoff * float64(time.Second)))
+				}
+				response, err := client.PutDataAdaptive(loadPutConnectorName, uniqueID, obj, backoff, loadPut429Adaptive, func() { had429 = true })
 				duration := time.Since(startTime)
+				if loadPut429Adaptive && err == nil {
+					current := float64(adaptiveBackoff.Load()) / float64(time.Second)
+					adaptiveBackoff.Store(int64(adaptiveRetryDelay(current, duration, !had429) * float64(time.Second)))
+					if ui != nil {
+						ui.SetMainRetryTimer(time.Duration(adaptiveBackoff.Load()))
+					}
+				}
 
 				result := putResult{
 					objectNum: objNum,
@@ -268,9 +303,15 @@ func runLoadDataPut(cmd *cobra.Command, args []string) error {
 				if err == nil {
 					result.status = response.Status
 					logger.Verbose("Worker %d: object %d completed successfully (took %v)", workerID, objNum, duration)
+					if ui != nil {
+						ui.Success(1, fmt.Sprintf("Object %d succeeded (%s, %v)", objNum, response.Status, duration.Round(time.Millisecond)))
+					}
 				} else {
 					result.status = "error"
 					logger.Verbose("Worker %d: object %d failed: %v", workerID, objNum, err)
+					if ui != nil {
+						ui.Failure(fmt.Sprintf("Object %d failed: %v", objNum, err))
+					}
 				}
 
 				resultsMutex.Lock()
@@ -278,6 +319,18 @@ func runLoadDataPut(cmd *cobra.Command, args []string) error {
 				resultsMutex.Unlock()
 
 				processedCount.Add(1)
+				if loadPut429Adaptive && err == nil {
+					pacingDuration := time.Duration(backoff*float64(time.Second)) - duration
+					if pacingDuration > 0 {
+						if ui != nil {
+							ui.Log(fmt.Sprintf("Pacing worker %d for %v before the next request", workerID, pacingDuration.Round(time.Millisecond)))
+						}
+						if !waitForPacing(pacingDuration, sigChan, uiInterrupt) {
+							interrupted.Store(true)
+							return
+						}
+					}
+				}
 
 				// Apply inter-object delay if configured
 				if loadPutDelay > 0.0 {
@@ -291,6 +344,10 @@ func runLoadDataPut(cmd *cobra.Command, args []string) error {
 					interrupted.Store(true)
 					logger.Verbose("Worker %d: received SIGINT - stopping", workerID)
 					return
+				case <-uiInterrupt:
+					interrupted.Store(true)
+					logger.Verbose("Worker %d: received CTRL-C - stopping", workerID)
+					return
 				default:
 				}
 			}
@@ -299,6 +356,22 @@ func runLoadDataPut(cmd *cobra.Command, args []string) error {
 
 	// Wait for all workers to complete
 	wg.Wait()
+	close(stopStream)
+	<-producerDone
+	select {
+	case err := <-streamErr:
+		if err != nil {
+			streamFailure = fmt.Errorf("failed while streaming JSON input: %w", err)
+			logger.Verbose("Input stream failed: %v", err)
+		}
+	default:
+	}
+	if ui != nil {
+		logger.SetEventSink(nil)
+		logger.SetRetrySink(nil)
+		ui.Close()
+		ui = nil
+	}
 
 	// Flush stderr before printing results to stdout
 	os.Stderr.Sync()
@@ -328,7 +401,7 @@ func runLoadDataPut(cmd *cobra.Command, args []string) error {
 	resultsMutex.Unlock()
 
 	// Print summary statistics
-	fmt.Printf("\n%-20s %d\n", "Total Objects:", len(dataArray))
+	fmt.Printf("\n%-20s %d\n", "Total Objects:", objectCount)
 	fmt.Printf("%-20s %d\n", "Processed:", processedCount.Load())
 	fmt.Printf("%-20s %d\n", "Successful:", successCount)
 	if errorCount > 0 {
@@ -350,5 +423,5 @@ func runLoadDataPut(cmd *cobra.Command, args []string) error {
 		logger.Verbose("Load operation completed: %d objects successfully loaded", successCount)
 	}
 
-	return nil
+	return streamFailure
 }
