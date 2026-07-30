@@ -340,6 +340,49 @@ func (c *Client) GetAllPushConnectorObjects(connectorName string) ([]map[string]
 	return allObjects, nil
 }
 
+// GetPushConnectorObjectsPage retrieves one page of objects from a push connector.
+func (c *Client) GetPushConnectorObjectsPage(connectorName string, size int, page int) ([]map[string]interface{}, error) {
+	data, _, err := c.GetPushConnectorObjectsPageWithLatency(connectorName, size, page)
+	return data, err
+}
+
+func (c *Client) GetPushConnectorObjectsPageWithLatency(connectorName string, size int, page int) ([]map[string]interface{}, time.Duration, error) {
+	url := fmt.Sprintf("%s/api/v1/pxgrid-direct/push/%s?size=%d&page=%d", c.BaseURL, connectorName, size, page)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.SetBasicAuth(c.Username, c.Password)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+
+	logger.HTTPRequest("GET", url)
+	startTime := time.Now()
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to execute request: %w", err)
+	}
+	body, readErr := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	latency := time.Since(startTime)
+	logger.HTTPResponse(resp.StatusCode, resp.Status, latency)
+	if readErr != nil {
+		return nil, latency, fmt.Errorf("failed to read response body: %w", readErr)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, latency, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var response struct {
+		Data []map[string]interface{} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, latency, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+	return response.Data, latency, nil
+}
+
 // BulkDeleteData submits delete operations to the bulk push API endpoint with retry logic for 429 rate limiting
 func (c *Client) BulkDeleteData(connectorName string, data []map[string]interface{}, backoffSeconds float64) (*BulkPushResponse, error) {
 	return c.BulkDeleteDataAdaptive(connectorName, data, backoffSeconds, false, nil)

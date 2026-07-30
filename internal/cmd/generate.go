@@ -77,14 +77,14 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	client := api.NewClient(host, username, password)
 
 	// Retrieve connector configuration
-	fmt.Printf("Retrieving connector configuration for '%s' from %s...\n", connectorName, host)
+	statusPrintf("Retrieving connector configuration for '%s' from %s...\n", connectorName, host)
 	logger.Verbose("Fetching connector configuration for: %s", connectorName)
 	connectorConfig, err := client.GetConnectorConfig(connectorName)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve connector config: %w", err)
 	}
 
-	fmt.Printf("Successfully retrieved connector configuration\n")
+	statusPrintf("Successfully retrieved connector configuration\n")
 	logger.Verbose("Connector type: %s, enabled: %v",
 		connectorConfig.Response.Connector.ConnectorType,
 		connectorConfig.Response.Connector.Enabled)
@@ -92,13 +92,13 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		len(connectorConfig.Response.Connector.Attributes.AttributeMapping))
 
 	// Generate test data
-	fmt.Printf("Generating %d test data elements...\n", numElements)
+	statusPrintf("Generating %d test data elements...\n", numElements)
 	logger.Verbose("Starting test data generation with %d elements", numElements)
 	testData := generator.GenerateTestData(connectorConfig, numElements)
 	logger.Verbose("Test data generation completed")
 
 	// Write to output file
-	fmt.Printf("Writing test data to %s...\n", outputFile)
+	statusPrintf("Writing test data to %s...\n", outputFile)
 	logger.Verbose("Marshaling test data to JSON")
 	data, err := json.MarshalIndent(testData, "", "  ")
 	if err != nil {
@@ -111,6 +111,6 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to write output file: %w", err)
 	}
 
-	fmt.Printf("Successfully generated %d test data elements in %s\n", numElements, outputFile)
+	statusPrintf("Successfully generated %d test data elements in %s\n", numElements, outputFile)
 	return nil
 }

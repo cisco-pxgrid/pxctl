@@ -73,7 +73,7 @@ func runCreatePushConnector(cmd *cobra.Command, args []string) error {
 	}
 
 	// Read and parse the YAML configuration file
-	fmt.Printf("Reading connector configuration from '%s'...\n", createPushConfigFile)
+	statusPrintf("Reading connector configuration from '%s'...\n", createPushConfigFile)
 	logger.Verbose("Reading YAML config file: %s", createPushConfigFile)
 
 	yamlData, err := os.ReadFile(createPushConfigFile)
@@ -171,26 +171,26 @@ func runCreatePushConnector(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	fmt.Printf("Creating push connector '%s' on %s...\n", connectorName, host)
+	statusPrintf("Creating push connector '%s' on %s...\n", connectorName, host)
 	logger.Verbose("Submitting connector creation request")
 
 	err = client.CreateConnector(payload)
 	if err != nil {
 		// On failure, display the URL and JSON payload
 		postURL := fmt.Sprintf("https://%s/api/v1/pxgrid-direct/connector-config", host)
-		fmt.Printf("\nError creating connector. Details:\n")
-		fmt.Printf("URL: %s\n", postURL)
-		fmt.Printf("\nJSON Payload:\n")
+		statusPrintf("\nError creating connector. Details:\n")
+		statusPrintf("URL: %s\n", postURL)
+		statusPrintf("\nJSON Payload:\n")
 		prettyJSON, jsonErr := json.MarshalIndent(payload, "", "  ")
 		if jsonErr == nil {
-			fmt.Printf("%s\n", string(prettyJSON))
+			statusPrintf("%s\n", string(prettyJSON))
 		} else {
-			fmt.Printf("(Failed to prettify JSON: %v)\n", jsonErr)
+			statusPrintf("(Failed to prettify JSON: %v)\n", jsonErr)
 		}
 		return fmt.Errorf("failed to create push connector: %w", err)
 	}
 
-	fmt.Printf("Successfully created push connector '%s'\n", connectorName)
+	statusPrintf("Successfully created push connector '%s'\n", connectorName)
 	logger.Verbose("Push connector created successfully")
 
 	return nil

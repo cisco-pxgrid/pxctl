@@ -97,7 +97,7 @@ func runLoadData(cmd *cobra.Command, args []string) error {
 	}
 
 	// Read input file
-	fmt.Printf("Scanning test data from %s...\n", loadInputFile)
+	statusPrintf("Scanning test data from %s...\n", loadInputFile)
 	objectCount, err := countJSONObjects(loadInputFile)
 	if err != nil {
 		return fmt.Errorf("failed to scan JSON input file: %w", err)
@@ -105,7 +105,7 @@ func runLoadData(cmd *cobra.Command, args []string) error {
 	if objectCount == 0 {
 		return fmt.Errorf("no data found in input file")
 	}
-	fmt.Printf("Found %d objects to load\n", objectCount)
+	statusPrintf("Found %d objects to load\n", objectCount)
 	logger.Verbose("Pre-scanned %d data objects from input file", objectCount)
 
 	// Create API client
@@ -115,7 +115,7 @@ func runLoadData(cmd *cobra.Command, args []string) error {
 	correlationIDField := ""
 	// If --empty-correlation-id flag is set, retrieve connector config and empty the correlation ID field
 	if loadEmptyCorrelationID {
-		fmt.Printf("Retrieving connector configuration to identify correlation ID field...\n")
+		statusPrintf("Retrieving connector configuration to identify correlation ID field...\n")
 		logger.Verbose("Fetching connector configuration to discover correlation identifier field")
 		connectorConfig, err := client.GetConnectorConfig(loadConnectorName)
 		if err != nil {
@@ -134,7 +134,7 @@ func runLoadData(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("no correlation identifier field found in connector configuration")
 		}
 
-		fmt.Printf("Emptying correlation ID field '%s' in all objects to create bad requests...\n", correlationIDField)
+		statusPrintf("Emptying correlation ID field '%s' in all objects to create bad requests...\n", correlationIDField)
 		logger.Verbose("Will empty correlation ID field '%s' while streaming objects", correlationIDField)
 	}
 
@@ -323,13 +323,13 @@ printResults:
 	os.Stderr.Sync()
 
 	// Print header
-	fmt.Printf("\n%-10s %-15s %-15s %-15s %s\n", "Batch", "Objects", "Size", "Duration", "Status")
-	fmt.Printf("%-10s %-15s %-15s %-15s %s\n", "-----", "-------", "----", "--------", "------")
+	statusPrintf("\n%-10s %-15s %-15s %-15s %s\n", "Batch", "Objects", "Size", "Duration", "Status")
+	statusPrintf("%-10s %-15s %-15s %-15s %s\n", "-----", "-------", "----", "--------", "------")
 
 	// Print all accumulated results
 	successCount := 0
 	for _, result := range results {
-		fmt.Printf("%-10d %-15d %-15s %-15s %s\n",
+		statusPrintf("%-10d %-15d %-15s %-15s %s\n",
 			result.batchNum,
 			result.objectCount,
 			result.size,
@@ -339,10 +339,10 @@ printResults:
 	}
 
 	if interrupted {
-		fmt.Printf("\nInterrupted: Loaded %d objects to connector '%s' before stopping\n", successCount, loadConnectorName)
+		statusPrintf("\nInterrupted: Loaded %d objects to connector '%s' before stopping\n", successCount, loadConnectorName)
 		logger.Verbose("Load operation interrupted: %d objects successfully loaded", successCount)
 	} else {
-		fmt.Printf("\nSuccessfully loaded %d objects to connector '%s'\n", successCount, loadConnectorName)
+		statusPrintf("\nSuccessfully loaded %d objects to connector '%s'\n", successCount, loadConnectorName)
 		logger.Verbose("Load operation completed: %d objects successfully loaded", successCount)
 	}
 	return streamErr

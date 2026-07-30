@@ -109,7 +109,7 @@ func runLoadDataPut(cmd *cobra.Command, args []string) error {
 	}
 
 	// Pre-scan the array to get the total without loading the file into memory.
-	fmt.Printf("Scanning test data from %s...\n", loadPutInputFile)
+	statusPrintf("Scanning test data from %s...\n", loadPutInputFile)
 	objectCount, err := countJSONObjects(loadPutInputFile)
 	if err != nil {
 		return fmt.Errorf("failed to scan JSON input file: %w", err)
@@ -117,7 +117,7 @@ func runLoadDataPut(cmd *cobra.Command, args []string) error {
 	if objectCount == 0 {
 		return fmt.Errorf("no data found in input file")
 	}
-	fmt.Printf("Found %d objects to load\n", objectCount)
+	statusPrintf("Found %d objects to load\n", objectCount)
 	logger.Verbose("Pre-scanned %d data objects from input file", objectCount)
 
 	// Create API client
@@ -132,7 +132,7 @@ func runLoadDataPut(cmd *cobra.Command, args []string) error {
 		logger.Verbose("Using user-specified unique identifier field: %s", uniqueIDField)
 	} else {
 		// Auto-discover from connector configuration
-		fmt.Printf("Retrieving connector configuration for '%s' from %s...\n", loadPutConnectorName, host)
+		statusPrintf("Retrieving connector configuration for '%s' from %s...\n", loadPutConnectorName, host)
 		logger.Verbose("Fetching connector configuration to discover unique identifier field")
 		connectorConfig, err := client.GetConnectorConfig(loadPutConnectorName)
 		if err != nil {
@@ -152,7 +152,7 @@ func runLoadDataPut(cmd *cobra.Command, args []string) error {
 		if uniqueIDField == "" {
 			return fmt.Errorf("no unique identifier field found in connector configuration")
 		}
-		fmt.Printf("Auto-discovered unique identifier field: %s\n", uniqueIDField)
+		statusPrintf("Auto-discovered unique identifier field: %s\n", uniqueIDField)
 	}
 
 	logger.Verbose("Processing %d objects with concurrency factor of %d", objectCount, loadPutConcurrency)
@@ -401,25 +401,25 @@ func runLoadDataPut(cmd *cobra.Command, args []string) error {
 	resultsMutex.Unlock()
 
 	// Print summary statistics
-	fmt.Printf("\n%-20s %d\n", "Total Objects:", objectCount)
-	fmt.Printf("%-20s %d\n", "Processed:", processedCount.Load())
-	fmt.Printf("%-20s %d\n", "Successful:", successCount)
+	statusPrintf("\n%-20s %d\n", "Total Objects:", objectCount)
+	statusPrintf("%-20s %d\n", "Processed:", processedCount.Load())
+	statusPrintf("%-20s %d\n", "Successful:", successCount)
 	if errorCount > 0 {
-		fmt.Printf("%-20s %d\n", "Errors:", errorCount)
+		statusPrintf("%-20s %d\n", "Errors:", errorCount)
 	}
 
 	if len(results) > 0 {
 		avgDuration := totalDuration / time.Duration(len(results))
-		fmt.Printf("\n%-20s %s\n", "Min Duration:", minDuration.Round(time.Millisecond))
-		fmt.Printf("%-20s %s\n", "Max Duration:", maxDuration.Round(time.Millisecond))
-		fmt.Printf("%-20s %s\n", "Avg Duration:", avgDuration.Round(time.Millisecond))
+		statusPrintf("\n%-20s %s\n", "Min Duration:", minDuration.Round(time.Millisecond))
+		statusPrintf("%-20s %s\n", "Max Duration:", maxDuration.Round(time.Millisecond))
+		statusPrintf("%-20s %s\n", "Avg Duration:", avgDuration.Round(time.Millisecond))
 	}
 
 	if interrupted.Load() {
-		fmt.Printf("\nInterrupted: Loaded %d objects to connector '%s' before stopping\n", successCount, loadPutConnectorName)
+		statusPrintf("\nInterrupted: Loaded %d objects to connector '%s' before stopping\n", successCount, loadPutConnectorName)
 		logger.Verbose("Load operation interrupted: %d objects successfully loaded", successCount)
 	} else {
-		fmt.Printf("\nSuccessfully loaded %d objects to connector '%s'\n", successCount, loadPutConnectorName)
+		statusPrintf("\nSuccessfully loaded %d objects to connector '%s'\n", successCount, loadPutConnectorName)
 		logger.Verbose("Load operation completed: %d objects successfully loaded", successCount)
 	}
 

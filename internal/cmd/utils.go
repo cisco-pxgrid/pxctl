@@ -2,9 +2,25 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"time"
 )
+
+func statusOutput() io.Writer {
+	if verbose {
+		return os.Stderr
+	}
+	return os.Stdout
+}
+
+func statusPrintf(format string, args ...interface{}) {
+	fmt.Fprintf(statusOutput(), format, args...)
+}
+
+func statusPrintln(args ...interface{}) {
+	fmt.Fprintln(statusOutput(), args...)
+}
 
 // formatBytes formats byte size into human-readable format
 func formatBytes(bytes int) string {

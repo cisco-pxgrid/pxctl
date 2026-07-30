@@ -93,7 +93,7 @@ func runDeleteData(cmd *cobra.Command, args []string) error {
 	client := api.NewClient(host, username, password)
 
 	// Retrieve connector configuration to get unique identifier field
-	fmt.Printf("Retrieving connector configuration for '%s' from %s...\n", deleteConnectorName, host)
+	statusPrintf("Retrieving connector configuration for '%s' from %s...\n", deleteConnectorName, host)
 	logger.Verbose("Fetching connector configuration to discover unique identifier field")
 	connectorConfig, err := client.GetConnectorConfig(deleteConnectorName)
 	if err != nil {
@@ -112,7 +112,7 @@ func runDeleteData(cmd *cobra.Command, args []string) error {
 	logger.Verbose("Using unique identifier field: %s", uniqueIDField)
 
 	// Retrieve all objects from the connector
-	fmt.Printf("Retrieving all objects from connector '%s'...\n", deleteConnectorName)
+	statusPrintf("Retrieving all objects from connector '%s'...\n", deleteConnectorName)
 	logger.Verbose("Fetching all objects from connector: %s", deleteConnectorName)
 	allObjects, err := client.GetAllPushConnectorObjects(deleteConnectorName)
 	if err != nil {
@@ -120,11 +120,11 @@ func runDeleteData(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(allObjects) == 0 {
-		fmt.Printf("No objects found in connector '%s'\n", deleteConnectorName)
+		statusPrintf("No objects found in connector '%s'\n", deleteConnectorName)
 		return nil
 	}
 
-	fmt.Printf("Found %d objects to delete\n", len(allObjects))
+	statusPrintf("Found %d objects to delete\n", len(allObjects))
 	logger.Verbose("Retrieved %d objects from connector", len(allObjects))
 
 	// Extract only the unique identifiers to minimize memory usage
@@ -277,13 +277,13 @@ printResults:
 	os.Stderr.Sync()
 
 	// Print header
-	fmt.Printf("\n%-10s %-15s %-15s %-15s %s\n", "Batch", "Objects", "Size", "Duration", "Status")
-	fmt.Printf("%-10s %-15s %-15s %-15s %s\n", "-----", "-------", "----", "--------", "------")
+	statusPrintf("\n%-10s %-15s %-15s %-15s %s\n", "Batch", "Objects", "Size", "Duration", "Status")
+	statusPrintf("%-10s %-15s %-15s %-15s %s\n", "-----", "-------", "----", "--------", "------")
 
 	// Print all accumulated results
 	successCount := 0
 	for _, result := range results {
-		fmt.Printf("%-10d %-15d %-15s %-15s %s\n",
+		statusPrintf("%-10d %-15d %-15s %-15s %s\n",
 			result.batchNum,
 			result.objectCount,
 			result.size,
@@ -293,10 +293,10 @@ printResults:
 	}
 
 	if interrupted {
-		fmt.Printf("\nInterrupted: Deleted %d objects from connector '%s' before stopping\n", successCount, deleteConnectorName)
+		statusPrintf("\nInterrupted: Deleted %d objects from connector '%s' before stopping\n", successCount, deleteConnectorName)
 		logger.Verbose("Delete operation interrupted: %d objects successfully deleted", successCount)
 	} else {
-		fmt.Printf("\nSuccessfully deleted %d objects from connector '%s'\n", successCount, deleteConnectorName)
+		statusPrintf("\nSuccessfully deleted %d objects from connector '%s'\n", successCount, deleteConnectorName)
 		logger.Verbose("Delete operation completed: %d objects successfully deleted", successCount)
 	}
 	return nil

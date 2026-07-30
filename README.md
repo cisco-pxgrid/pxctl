@@ -387,6 +387,30 @@ When verbose logging is enabled, you'll see detailed progress information includ
 ...
 ```
 
+### Get Connector Objects
+
+Retrieve objects from a push connector using the paginated endpoint. Pages are
+concatenated into one JSON document with a single top-level `data` property.
+
+```bash
+./bin/pxctl get \
+  --host ise.example.com \
+  --username admin \
+  --password password123 \
+  --connector PUSH_CONNECTOR \
+  --size 1000 \
+  --page 0 \
+  --limit 5000 \
+  --output objects.json
+```
+
+Options:
+
+- `--size`: Objects requested per page (default: 1000)
+- `--page`: Initial page number (default: 0)
+- `--limit`: Maximum objects to return; `0` retrieves all objects
+- `-o, --output`: Output file; omitted means JSON is written to stdout
+
 ### Create Push Connector
 
 Create a new pxGrid Direct push connector from a YAML configuration file:

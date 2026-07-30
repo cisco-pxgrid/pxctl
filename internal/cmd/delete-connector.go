@@ -65,14 +65,14 @@ func runDeleteConnector(cmd *cobra.Command, args []string) error {
 	logger.Verbose("Creating ISE API client for host: %s", host)
 	client := api.NewClient(host, username, password)
 
-	fmt.Printf("Deleting connector '%s'...\n", delConnConnectorName)
+	statusPrintf("Deleting connector '%s'...\n", delConnConnectorName)
 	logger.Verbose("Attempting to delete connector: %s", delConnConnectorName)
 
 	if err := client.DeleteConnector(delConnConnectorName); err != nil {
 		return fmt.Errorf("failed to delete connector: %w", err)
 	}
 
-	fmt.Printf("Successfully deleted connector '%s'\n", delConnConnectorName)
+	statusPrintf("Successfully deleted connector '%s'\n", delConnConnectorName)
 	logger.Verbose("Connector deleted successfully")
 
 	return nil

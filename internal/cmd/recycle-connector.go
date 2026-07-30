@@ -87,7 +87,7 @@ func runRecycleConnector(cmd *cobra.Command, args []string) error {
 	// Step 1: Retrieve the named connector config (using raw method to preserve ALL fields)
 	// This ensures we extract the FULL object at $.response.connector including credentials,
 	// schedules, and any other fields not explicitly defined in the struct.
-	fmt.Printf("Retrieving configuration for connector '%s'...\n", recycleConnectorName)
+	statusPrintf("Retrieving configuration for connector '%s'...\n", recycleConnectorName)
 	logger.Verbose("Fetching connector configuration for: %s", recycleConnectorName)
 
 	configMap, err := client.GetConnectorConfigRaw(recycleConnectorName)
@@ -111,7 +111,7 @@ func runRecycleConnector(cmd *cobra.Command, args []string) error {
 
 	isPullConnector := (connectorType == "urlfetcher" || connectorType == "vmware")
 
-	fmt.Printf("Retrieved connector configuration (type: %s)\n", connectorType)
+	statusPrintf("Retrieved connector configuration (type: %s)\n", connectorType)
 	logger.Verbose("Connector type: %s, isPullConnector: %t", connectorType, isPullConnector)
 
 	// Determine the target connector name
@@ -120,24 +120,24 @@ func runRecycleConnector(cmd *cobra.Command, args []string) error {
 	if copyMode {
 		// For copy mode, use the provided name
 		targetConnectorName = recycleCopyName
-		fmt.Printf("Copy mode: New connector will be named '%s'\n", targetConnectorName)
+		statusPrintf("Copy mode: New connector will be named '%s'\n", targetConnectorName)
 		logger.Verbose("Copy mode: Target connector name: %s", targetConnectorName)
 	}
 
 	// Step 2: Delete the connector (only if NOT in copy mode)
 	if !copyMode {
-		fmt.Printf("Deleting connector '%s'...\n", recycleConnectorName)
+		statusPrintf("Deleting connector '%s'...\n", recycleConnectorName)
 		logger.Verbose("Attempting to delete connector: %s", recycleConnectorName)
 
 		if err := client.DeleteConnector(recycleConnectorName); err != nil {
 			return fmt.Errorf("failed to delete connector: %w", err)
 		}
 
-		fmt.Printf("Successfully deleted connector '%s'\n", recycleConnectorName)
+		statusPrintf("Successfully deleted connector '%s'\n", recycleConnectorName)
 		logger.Verbose("Connector deleted successfully")
 
 		// Wait 5 seconds before recreating
-		fmt.Println("Waiting 5 seconds before recreating connector...")
+		statusPrintln("Waiting 5 seconds before recreating connector...")
 		logger.Verbose("Sleeping for 5 seconds before recreation")
 		time.Sleep(5 * time.Second)
 	}
@@ -172,10 +172,10 @@ func runRecycleConnector(cmd *cobra.Command, args []string) error {
 
 	// Step 4: Create or recreate the connector with retry logic
 	if copyMode {
-		fmt.Printf("Creating copy of connector as '%s'...\n", targetConnectorName)
+		statusPrintf("Creating copy of connector as '%s'...\n", targetConnectorName)
 		logger.Verbose("Creating connector copy with updated configuration")
 	} else {
-		fmt.Printf("Recreating connector '%s'...\n", targetConnectorName)
+		statusPrintf("Recreating connector '%s'...\n", targetConnectorName)
 		logger.Verbose("Recreating connector with updated configuration")
 	}
 
@@ -195,7 +195,7 @@ func runRecycleConnector(cmd *cobra.Command, args []string) error {
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sigChan
-		fmt.Println("\n\nReceived interrupt signal. Cancelling operation...")
+		statusPrintln("\n\nReceived interrupt signal. Cancelling operation...")
 		logger.Verbose("User interrupted operation with CTRL+C")
 		cancel()
 	}()
@@ -225,14 +225,14 @@ func runRecycleConnector(cmd *cobra.Command, args []string) error {
 
 		if !isEndpointError {
 			// Not the specific error we're looking for - fail immediately
-			fmt.Printf("\nError creating connector. Details:\n")
-			fmt.Printf("URL: %s\n", postURL)
-			fmt.Printf("\nJSON Payload:\n")
+			statusPrintf("\nError creating connector. Details:\n")
+			statusPrintf("URL: %s\n", postURL)
+			statusPrintf("\nJSON Payload:\n")
 			prettyJSON, jsonErr := json.MarshalIndent(recreateConfig, "", "  ")
 			if jsonErr == nil {
-				fmt.Printf("%s\n", string(prettyJSON))
+				statusPrintf("%s\n", string(prettyJSON))
 			} else {
-				fmt.Printf("(Failed to prettify JSON: %v)\n", jsonErr)
+				statusPrintf("(Failed to prettify JSON: %v)\n", jsonErr)
 			}
 
 			if copyMode {
@@ -243,18 +243,18 @@ func runRecycleConnector(cmd *cobra.Command, args []string) error {
 
 		// It's the endpoint deletion error - retry with backoff
 		if attemptNum == 1 {
-			fmt.Printf("Connector creation failed: endpoints from deleted connector are still being removed.\n")
+			statusPrintf("Connector creation failed: endpoints from deleted connector are still being removed.\n")
 			logger.Verbose("Detected endpoint deletion in progress: %s", errMsg)
 		}
 
-		fmt.Printf("Retrying in %d seconds (attempt %d)... Press CTRL+C to cancel.\n", retryDelay, attemptNum)
+		statusPrintf("Retrying in %d seconds (attempt %d)... Press CTRL+C to cancel.\n", retryDelay, attemptNum)
 		logger.Verbose("Waiting %d seconds before retry attempt %d", retryDelay, attemptNum+1)
 
 		// Wait with context cancellation support
 		select {
 		case <-ctx.Done():
 			// User hit CTRL+C
-			fmt.Println("Operation cancelled by user.")
+			statusPrintln("Operation cancelled by user.")
 			return fmt.Errorf("operation cancelled by user")
 		case <-time.After(time.Duration(retryDelay) * time.Second):
 			// Continue to next retry
@@ -269,31 +269,31 @@ func runRecycleConnector(cmd *cobra.Command, args []string) error {
 	close(sigChan)
 
 	if copyMode {
-		fmt.Printf("Successfully created connector copy '%s'\n", targetConnectorName)
+		statusPrintf("Successfully created connector copy '%s'\n", targetConnectorName)
 		logger.Verbose("Connector copy created successfully")
 	} else {
-		fmt.Printf("Successfully recreated connector '%s'\n", targetConnectorName)
+		statusPrintf("Successfully recreated connector '%s'\n", targetConnectorName)
 		logger.Verbose("Connector recreated successfully")
 	}
 
 	// Step 5: If it's a PULL connector, trigger sync-now
 	if isPullConnector {
-		fmt.Printf("Triggering sync-now for PULL connector '%s'...\n", targetConnectorName)
+		statusPrintf("Triggering sync-now for PULL connector '%s'...\n", targetConnectorName)
 		logger.Verbose("Triggering FULL sync-now for pull connector")
 
 		if err := client.SyncNowConnector(targetConnectorName, "FULL"); err != nil {
 			return fmt.Errorf("failed to trigger sync-now: %w", err)
 		}
 
-		fmt.Printf("Successfully triggered sync-now for connector '%s'\n", targetConnectorName)
+		statusPrintf("Successfully triggered sync-now for connector '%s'\n", targetConnectorName)
 		logger.Verbose("Sync-now triggered successfully")
 	}
 
 	if copyMode {
-		fmt.Printf("\nConnector '%s' copied successfully as '%s'!\n", recycleConnectorName, targetConnectorName)
+		statusPrintf("\nConnector '%s' copied successfully as '%s'!\n", recycleConnectorName, targetConnectorName)
 		logger.Verbose("Copy operation completed successfully")
 	} else {
-		fmt.Printf("\nConnector '%s' recycled successfully!\n", targetConnectorName)
+		statusPrintf("\nConnector '%s' recycled successfully!\n", targetConnectorName)
 		logger.Verbose("Recycle operation completed successfully")
 	}
 
